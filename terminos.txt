@@ -1,0 +1,10 @@
+zip
+rar
+txt
+php
+asp
+aspx
+json
+=
+login
+profile
