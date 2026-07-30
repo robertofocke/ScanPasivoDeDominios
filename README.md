@@ -1,0 +1,1 @@
+Scaner en desarrollo
