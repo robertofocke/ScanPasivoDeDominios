@@ -26,7 +26,6 @@ URL_REGEX = re.compile(r'https?://[^\s"\']+')
 terminos = ["http", "https"]
 
 palabras_clave = []
-output_leak = "salida_leaks.txt"
 target = ""
 subdomains = []
 
@@ -35,7 +34,7 @@ def get_random_user_agent():
     return random.choice(USER_AGENTS)   
 def carga_palabrasclave ():
     global palabras_clave 
-    with open("terminos.txt", "r", encoding="utf-8") as archivo:
+    with open("diccionario.txt", "r", encoding="utf-8") as archivo:
         palabras_clave = [linea.strip() for linea in archivo if linea.strip()]
 
 def save_subdomains(subdomain,output_file):
@@ -102,7 +101,8 @@ if __name__ == "__main__":
         print("Uso: script.py <Dominio>")
         sys.exit(1)
     carga_palabrasclave()
-    subdomains = [] 
-    output = "salida.txt"
+    subdomains = []
+    output_leak = str(sys.argv[1]+"_output_leaks.txt")
+    output = str(sys.argv[1]+"_output_subdominios.txt")
     scanear_Dominio(str(sys.argv[1]))
 
