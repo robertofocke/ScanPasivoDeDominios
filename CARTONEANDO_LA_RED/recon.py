@@ -249,7 +249,7 @@ def escanear_dominio(dominio_objetivo: str, consultar_shodan: bool = True):
             "shodan": ips_consultadas[ip], 
             "captura": None, 
             "google": "https://www.google.com/search?q=ite%3Aapi.urlscan.io%2Fresult+host&sca_esv=1e85827d6e1fa685&sxsrf=APpeQntxHA_jTaFj_EJBg2CMzMNqThJikQ%3A1785875749228&source=hp&ei=JU1yao7eC9vL1sQP-LuE8AI&iflsig=ABILxe8AAAAAanJbNaIh2fFIP5Ac4QWJu2kVW7z64qDb&ved=0ahUKEwjOhJPN6YeWAxXbpZUCHfgdAS4Q4dUDCCc&uact=5&oq=ite%3Aapi.urlscan.io%2Fresult+"+str(sub), 
-            "weymachine": "https://web.machie.org/web/*/"+str(sub)+"/*",
+            "weymachine": "https://web.archilve.org/web/*/"+str(sub)+"/*",
             "tecnologia":tecnologia
         }
         print(entrada)
