@@ -1,0 +1,17 @@
+zip
+rar
+txt
+php
+asp
+aspx
+json
+=
+login
+profile
+wp-content
+plugins
+config
+git
+db
+js
+
