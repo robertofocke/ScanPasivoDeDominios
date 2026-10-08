@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Recon Pasivo — Subdominios / IPs / Shodan</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --border: #2a2e38;
+    --text: #e6e8eb;
+    --muted: #8b93a1;
+    --accent: #4f8cff;
+    --ok: #3fbf6f;
+    --err: #ff5a5a;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 40px 20px;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; }
+  h1 { font-size: 1.4rem; margin-bottom: 4px; }
+  p.subtitle { color: var(--muted); margin-top: 0; font-size: 0.9rem; }
+  .search-box {
+    display: flex;
+    gap: 10px;
+    margin: 24px 0;
+  }
+  input[type="text"] {
+    flex: 1;
+    padding: 14px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text);
+    font-size: 1rem;
+  }
+  input[type="text"]:focus { outline: 2px solid var(--accent); }
+  button {
+    padding: 14px 22px;
+    border-radius: 8px;
+    border: none;
+    background: var(--accent);
+    color: white;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 1rem;
+  }
+  button:disabled { opacity: 0.6; cursor: not-allowed; }
+  .notice {
+    background: #201a10;
+    border: 1px solid #4a3a12;
+    color: #e0b862;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    margin-bottom: 20px;
+  }
+  #status { color: var(--muted); margin-bottom: 16px; font-size: 0.9rem; }
+  .summary {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 20px;
+  }
+  .summary div {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 18px;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+  .summary strong { display: block; color: var(--text); font-size: 1.3rem; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin-bottom: 14px;
+  }
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .subdomain { font-weight: 600; word-break: break-all; }
+  .ip {
+    font-family: 'Consolas', monospace;
+    color: var(--accent);
+    background: #10233c;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+  }
+  .ip.none { color: var(--muted); background: transparent; }
+  .shodan-block { margin-top: 10px; font-size: 0.85rem; }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+  .badge.ok { background: #0f3322; color: var(--ok); }
+  .badge.err { background: #331313; color: var(--err); }
+  table.ports { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 0.85rem; }
+  table.ports th, table.ports td {
+    text-align: left;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border);
+    color: var(--muted);
+  }
+  table.ports th { color: var(--text); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Cartoneando la Red</h1>
+
+  <div class="notice">
+ Esta herramienta no es un scanner de vulnerabilidades, busca escaneos previos en internet de libre acceso sin usar apikey ni otro servicio pago
+  </div>
+
+  <div class="search-box">
+    <input type="text" id="target" placeholder="ejemplo.com" autocomplete="off">
+    <button id="scanBtn">Escanear</button>
+  </div>
+
+  <div id="status"></div>
+  <div id="summary" class="summary" style="display:none;"></div>
+  <div id="results"></div>
+</div>
+
+<script>
+const targetInput = document.getElementById('target');
+const scanBtn = document.getElementById('scanBtn');
+const statusEl = document.getElementById('status');
+const summaryEl = document.getElementById('summary');
+const resultsEl = document.getElementById('results');
+
+async function runScan() {
+  const target = targetInput.value.trim();
+  if (!target) {
+    statusEl.textContent = 'Ingresá un dominio primero.';
+    return;
+  }
+
+  scanBtn.disabled = true;
+  resultsEl.innerHTML = '';
+  summaryEl.style.display = 'none';
+  statusEl.textContent = 'Escaneando... esto puede tardar según la cantidad de subdominios encontrados.';
+
+  // 1) La conexión en sí (servidor apagado, DNS, CORS) va en su propio try.
+  let resp;
+  try {
+    resp = await fetch('/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target })
+    });
+  } catch (err) {
+    statusEl.textContent = 'No se pudo conectar con /scan. ¿Está corriendo ' +
+      'app.py (Flask) en este puerto? Detalle: ' + err.message;
+    scanBtn.disabled = false;
+    return;
+  }
+
+  // 2) Leemos SIEMPRE como texto; decidimos según content-type y status.
+  const contentType = resp.headers.get('content-type') || '';
+  let raw = '';
+  try { raw = await resp.text(); } catch (e) { raw = ''; }
+
+  if (!contentType.includes('application/json')) {
+    // El server devolvió algo que no es JSON (HTML de error, 404 de otro server...)
+    let pista = '';
+    if (resp.status === 404) {
+      pista = ' El endpoint /scan respondió 404 con HTML: probablemente la ' +
+        'petición no está llegando a Flask. Verificá que corras app.py y entres ' +
+        'por http://127.0.0.1:5000 (esa página Next.js no la genera Flask).';
+    } else if (resp.status >= 500) {
+      pista = ' El backend lanzó una excepción: mirá el traceback en la consola de Flask.';
+    } else {
+      pista = ' Se esperaba JSON y llegó otra cosa.';
+    }
+    statusEl.textContent = 'Respuesta HTTP ' + resp.status + ' sin JSON.' + pista;
+    console.error('[scan] respuesta cruda del servidor:', raw.slice(0, 1000));
+    scanBtn.disabled = false;
+    return;
+  }
+
+  // 3) Es JSON (por content-type), pero puede venir mal formado.
+  let data;
+  try {
+    data = raw ? JSON.parse(raw) : {};
+  } catch (e) {
+    statusEl.textContent = 'El servidor devolvió JSON inválido (HTTP ' + resp.status + ').';
+    console.error('[scan] JSON inválido:', raw.slice(0, 1000));
+    scanBtn.disabled = false;
+    return;
+  }
+
+  // 4) Error controlado del backend (400/500 con {"error": ...}).
+  if (!resp.ok) {
+    statusEl.textContent = 'Error: ' + (data.error || ('HTTP ' + resp.status));
+    scanBtn.disabled = false;
+    return;
+  }
+
+  // 5) Todo bien. Si crt.sh falló, lo decimos claro en vez de "no hay subdominios".
+  if (data.advertencia && (!data.resultados || data.resultados.length === 0)) {
+    statusEl.textContent = 'No se pudo consultar crt.sh (' + data.advertencia +
+      '). Probá de nuevo en unos segundos: crt.sh suele estar saturado.';
+  } else {
+    statusEl.textContent = '';
+  }
+  renderSummary(data);
+  renderResults(data.resultados);
+  scanBtn.disabled = false;
+}
+
+function renderSummary(data) {
+  summaryEl.style.display = 'flex';
+  summaryEl.innerHTML = `
+    <div><strong>${data.dominio}</strong> objetivo</div>
+    ${data.total_subdominios_encontrados ? `<div><strong>${data.total_subdominios_encontrados}</strong> subdominios</div>` : ''}
+  `;
+}
+
+// Escapa texto para no romper el HTML con nombres raros
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function renderResults(resultados) {
+  if (!resultados || resultados.length === 0) {
+    resultsEl.innerHTML = '<p style="color:var(--muted)">No se encontraron subdominios.</p>';
+    return;
+  }
+
+  resultsEl.innerHTML = resultados.map(r => {
+    const nombre = r.subdominio || r.ip || '(sin nombre)';
+    const ipHtml = r.ip
+      ? `<span class="ip">${esc(r.ip)}</span>`
+      : `<span class="ip none">sin resolución DNS</span>`;
+
+    // IMPORTANTE: declarar SIEMPRE la variable.
+    // El error "shodanHtml is not defined" venía de usarla sin declararla
+    // cuando r.shodan era null o r.shodan.ok era false (comodines / IP sin datos).
+    let shodanHtml = '';
+
+    const enlacesExtra = `
+      ${r.google ? `<a href="${esc(r.google)}" target="_blank" rel="noopener">Google</a>` : ''}
+      ${r.weymachine ? `&nbsp;·&nbsp;<a href="${esc(r.weymachine)}" target="_blank" rel="noopener">Wayback Machine</a>` : ''}
+      ${r.tecnologia ? `&nbsp;·&nbsp;<span class="badge ok">${esc(r.tecnologia)}</span>` : ''}
+    `;
+
+    if (r.shodan && r.shodan.ok) {
+      const puertos = r.shodan.puertos || [];
+      const puertosRows = puertos
+        .map(p => `<tr><td>${esc(p.puerto)}</td><td>${esc(p.servicio)}</td></tr>`)
+        .join('');
+      const tabla = puertos.length
+        ? `<table class="ports"><thead><tr><th>Puerto</th><th>Servicio</th></tr></thead><tbody>${puertosRows}</tbody></table>`
+        : '<div style="color:var(--muted); margin-top:6px;">Sin puertos listados públicamente.</div>';
+
+      shodanHtml = `
+        <div class="shodan-block">
+          <span class="badge ok">Shodan OK</span>
+          ${r.shodan.url ? `<a href="${esc(r.shodan.url)}" target="_blank" rel="noopener">${esc(r.shodan.url)}</a>` : ''}
+          <br><br>
+          ${enlacesExtra}
+          ${r.shodan.captura ? `<br><br><img src="${esc(r.shodan.captura)}"><a href="${esc(r.shodan.captura)}" target="_blank" rel="noopener">Ver captura en Shodan</a>` : ''}
+          ${tabla}
+        </div>`;
+    } else {
+      // Caso comodín / IP dinámica sin datos / sin resolución DNS:
+      // se muestra la tarjeta igual, sin romper el render.
+      const motivo = !r.ip
+        ? 'sin resolución DNS'
+        : (r.shodan && r.shodan.error ? r.shodan.error : 'sin datos públicos en Shodan');
+      shodanHtml = `
+        <div class="shodan-block">
+          <span class="badge err">Shodan —</span>
+          <span style="color:var(--muted)"> ${esc(motivo)}</span>
+          <br><br>
+          ${enlacesExtra}
+        </div>`;
+    }
+
+    return `
+      <div class="card">
+        <div class="card-header">
+          <span class="subdomain">${esc(nombre)}</span>
+          ${ipHtml}
+        </div>
+        ${shodanHtml}
+      </div>`;
+  }).join('');
+}
+
+scanBtn.addEventListener('click', runScan);
+targetInput.addEventListener('keydown', e => { if (e.key === 'Enter') runScan(); });
+</script>
+</body>
+</html>
